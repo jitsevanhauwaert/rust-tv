@@ -14,6 +14,20 @@
 <div id="foto"></div>
 <div id="sluier"></div>
 <div id="bron"></div>
+<div id="muziek" hidden>
+  <img id="mHoes" alt="">
+  <div class="mtekst">
+    <div id="mBron">SPOTIFY</div>
+    <div id="mTitel"></div>
+    <div id="mArtiest"></div>
+    <div id="mBalk"><div id="mVoort"></div></div>
+    <div id="mKnoppen">
+      <span id="mVorige" class="mk vorige"><svg viewBox="0 0 24 24"><path d="M19 5 9 12l10 7z"/><path d="M5 5v14"/></svg></span>
+      <span id="mSpeel" class="mk speel"><svg class="ip" viewBox="0 0 24 24"><path d="M8 5v14"/><path d="M16 5v14"/></svg><svg class="is" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg></span>
+      <span id="mVolgende" class="mk volgende"><svg viewBox="0 0 24 24"><path d="M5 5l10 7-10 7z"/><path d="M19 5v14"/></svg></span>
+    </div>
+  </div>
+</div>
 <main id="thuis">
   <div class="boven">
     <div id="klok">--:--</div>
@@ -21,17 +35,26 @@
     <div id="weer"></div>
   </div>
   <div id="tegels" class="rij"></div>
-  <div id="hint">Hou OK ingedrukt om een tegel te verplaatsen of te verwijderen</div>
 </main>
 <section id="alle" hidden>
   <h2>Alle apps</h2>
-  <p class="uitleg">OK = openen · OK ingedrukt houden = op je startscherm zetten of eraf halen · Terug = sluiten</p>
   <div id="raster"></div>
+  <p class="uitleg">OK openen · OK ingedrukt houden: op startscherm zetten of verbergen · Terug sluiten</p>
 </section>
 <div id="bewerk" hidden>
   <span id="bewerkNaam"></span>
   <span>◀ ▶ verplaatsen · OK klaar · ▼ verwijderen</span>
 </div>
+<section id="inst" hidden>
+  <div id="instLinks">
+    <h1>Instellingen</h1>
+    <div id="instMenu"></div>
+    <div id="wachterRegel"><span id="wachterLampje"></span>Wachter</div>
+  </div>
+  <div id="instPaneel"></div>
+</section>
+<div id="menu" hidden></div>
+<input id="invoer" type="text" hidden autocomplete="off" spellcheck="false">
 <div id="melding" hidden></div>
 <!--rust-einde-->
 </div>

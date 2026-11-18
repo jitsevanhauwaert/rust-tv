@@ -98,7 +98,7 @@
         tizen.tvwindow.setSource(bron, function () {
           tizen.tvwindow.show(function () {
             hdmiActief = true;
-            document.body.className = "hdmi";
+            klasse();
             melding(a.naam + " · druk op Terug voor Rust TV");
           }, fout(a.naam), ["0px", "0px", "1920px", "1080px"], "MAIN");
         }, fout(a.naam), "MAIN");
@@ -108,15 +108,40 @@
   function sluitIngang() {
     try { tizen.tvwindow.hide(function () {}, function () {}, "MAIN"); } catch (e) {}
     hdmiActief = false;
-    document.body.className = "";
+    klasse();
     teken();
   }
 
+  // ---------- meldingen en de klasse op <body> ----------
   var meldTimer = null;
   function melding(t) {
     var m = $("melding"); m.textContent = t; m.hidden = false;
     clearTimeout(meldTimer); meldTimer = setTimeout(function () { m.hidden = true; }, 5000);
   }
+  var avond = false, rust = false;
+  function klasse() {
+    var k = [];
+    if (hdmiActief) k.push("hdmi");
+    if (avond) k.push("avond");
+    if (rust) k.push("rust");
+    document.body.className = k.join(" ");
+  }
+  function lees(sleutel, standaard) { try { var v = JSON.parse(localStorage.getItem(sleutel)); return v === null || v === undefined ? standaard : v; } catch (e) { return standaard; } }
+  function schrijf(sleutel, v) { try { localStorage.setItem(sleutel, JSON.stringify(v)); } catch (e) {} }
+
+  // ---------- verborgen apps ----------
+  // Samsung-apps die bijna niemand gebruikt staan meteen bij "Verborgen". Je kunt ze altijd terughalen.
+  var STANDAARD_VERBORGEN = /e-manual|e-handleiding|handleiding|smartthings|universal guide|galer|gallery|health|bixby|alexa|tv plus|art store|kids|tutorial|fitness|game launcher|gaming hub|ambient|workout|apps$/i;
+  var verborgen = [];
+  function laadVerborgen() {
+    verborgen = lees("rusttv.verborgen", null);
+    if (!verborgen) {
+      verborgen = apps.filter(function (a) { return !a.poort && STANDAARD_VERBORGEN.test(a.naam) && favorieten.indexOf(a.id) < 0; })
+        .map(function (a) { return a.id; });
+      schrijf("rusttv.verborgen", verborgen);
+    }
+  }
+  function isVerborgen(id) { return verborgen.indexOf(id) >= 0; }
 
   // ---------- tegels ----------
   function tegel(a, extra) {
@@ -138,88 +163,202 @@
     d.appendChild(s);
     return d;
   }
+  var zone = "tegels";      // op het startscherm: tegels | muziek
+  var muziekFocus = 1;      // 0 vorige, 1 afspelen/pauze, 2 volgende
   function tekenThuis() {
     var r = $("tegels"); r.innerHTML = "";
     var lijst = favorieten.map(app).concat([{ id: "_alle", naam: "Alle apps", icoon: "" }]);
     if (focus >= lijst.length) focus = lijst.length - 1;
     lijst.forEach(function (a, i) {
-      r.appendChild(tegel(a, (i === focus ? " focus" : "") + (i === bewegen ? " beweeg" : "")));
+      r.appendChild(tegel(a, (i === focus && zone === "tegels" ? " focus" : "") + (i === bewegen ? " beweeg" : "")));
     });
     $("bewerk").hidden = bewegen < 0;
     if (bewegen >= 0) $("bewerkNaam").textContent = app(favorieten[bewegen]).naam;
-    $("hint").hidden = bewegen >= 0;
-  }
-  function tekenAlle() {
-    var r = $("raster"); r.innerHTML = "";
-    var per = 6, rijen = 4, start = Math.max(0, Math.floor(focusAlle / per) - rijen + 1) * per;
-    apps.slice(start, start + per * rijen).forEach(function (a, j) {
-      var i = start + j, d = tegel(a, i === focusAlle ? " focus" : "");
-      if (favorieten.indexOf(a.id) >= 0) { var st = document.createElement("span"); st.className = "ster"; st.textContent = "★"; d.appendChild(st); }
-      r.appendChild(d);
-    });
-  }
-  function teken() {
-    $("alle").hidden = scherm !== "alle";
-    if (scherm === "alle") tekenAlle(); else tekenThuis();
+    tekenMuziekFocus();
   }
 
+  // ---------- Alle apps: drie groepen ----------
+  var PER_RIJ = 7;
+  var toonVerborgen = false;
+  var rijen = [];           // [{kop, items:[...]}], items: app of {soort}
+  var fr = 0, fk = 0;       // focus: rij en kolom
+  function bouwAlle() {
+    rijen = [];
+    function blok(kop, lijst) {
+      for (var i = 0; i < lijst.length; i += PER_RIJ) rijen.push({ kop: i === 0 ? kop : null, items: lijst.slice(i, i + PER_RIJ) });
+    }
+    rijen.push({ kop: null, items: [{ soort: "inst", naam: "Instellingen" }], knoppen: true });
+    var op = favorieten.map(app).filter(Boolean);
+    var andere = apps.filter(function (a) { return favorieten.indexOf(a.id) < 0 && !isVerborgen(a.id); });
+    var weg = apps.filter(function (a) { return favorieten.indexOf(a.id) < 0 && isVerborgen(a.id); });
+    blok("Op je startscherm · " + op.length, op);
+    if (andere.length) blok("Andere apps · " + andere.length, andere);
+    rijen.push({ kop: "Verborgen · " + weg.length, items: [{ soort: "toon", naam: toonVerborgen ? "Verborgen apps sluiten" : "Verborgen apps tonen" }], knoppen: true });
+    if (toonVerborgen) blok(null, weg);
+    if (fr >= rijen.length) fr = rijen.length - 1;
+    if (fk >= rijen[fr].items.length) fk = rijen[fr].items.length - 1;
+  }
+  function huidigItem() { return rijen[fr] && rijen[fr].items[fk]; }
+  function tekenAlle() {
+    bouwAlle();
+    var r = $("raster"); r.innerHTML = "";
+    var focusEl = null;
+    rijen.forEach(function (rij, ri) {
+      if (rij.kop) { var h = document.createElement("div"); h.className = "groep"; h.textContent = rij.kop; r.appendChild(h); }
+      var rd = document.createElement("div"); rd.className = rij.knoppen ? "knoprij" : "apprij";
+      rij.items.forEach(function (a, ki) {
+        var f = ri === fr && ki === fk, d;
+        if (a.soort) { d = document.createElement("div"); d.className = "knop" + (f ? " focus" : ""); d.textContent = a.naam; }
+        else {
+          d = tegel(a, " klein" + (f ? " focus" : "") + (isVerborgen(a.id) ? " grijs" : ""));
+        }
+        if (f) focusEl = d;
+        rd.appendChild(d);
+      });
+      r.appendChild(rd);
+    });
+    // in beeld schuiven
+    if (focusEl) { var y = focusEl.offsetTop - 260; r.scrollTop = Math.max(0, y); }
+  }
+
+  // ---------- klein menu (OK ingedrukt houden) ----------
+  var menu = null;          // {opties:[{t, doe}], i}
+  function openMenu(opties, x, y) {
+    menu = { opties: opties.concat([{ t: "Annuleren", doe: function () {} }]), i: 0, x: x, y: y };
+    tekenMenu();
+  }
+  function tekenMenu() {
+    var m = $("menu");
+    if (!menu) { m.hidden = true; return; }
+    m.innerHTML = "";
+    menu.opties.forEach(function (o, i) { var d = document.createElement("div"); d.className = "optie" + (i === menu.i ? " focus" : ""); d.textContent = o.t; m.appendChild(d); });
+    m.style.left = menu.x + "px"; m.style.bottom = menu.y + "px";
+    m.hidden = false;
+  }
+  function sluitMenu() { menu = null; tekenMenu(); }
+  function menuThuis() {
+    var a = app(favorieten[focus]); if (!a) return;
+    var el = $("tegels").children[focus], x = el ? el.offsetLeft + el.offsetWidth / 2 - 190 : 760;
+    openMenu([
+      { t: "Verplaatsen", doe: function () { bewegen = focus; } },
+      { t: "Van startscherm halen", doe: function () { favorieten.splice(focus, 1); bewaar(); melding(a.naam + " van je startscherm gehaald"); } },
+      { t: "Verbergen", doe: function () { favorieten.splice(focus, 1); bewaar(); if (!a.poort && !isVerborgen(a.id)) { verborgen.push(a.id); schrijf("rusttv.verborgen", verborgen); } melding(a.naam + " verborgen"); } }
+    ], Math.max(40, Math.min(1500, x)), 370);
+  }
+  function menuAlle() {
+    var a = huidigItem(); if (!a || a.soort) return;
+    var op = favorieten.indexOf(a.id) >= 0, weg = isVerborgen(a.id);
+    var o = [];
+    o.push(op ? { t: "Van startscherm halen", doe: function () { favorieten.splice(favorieten.indexOf(a.id), 1); bewaar(); } }
+              : { t: "Op startscherm zetten", doe: function () { favorieten.push(a.id); bewaar(); if (weg) { verborgen.splice(verborgen.indexOf(a.id), 1); schrijf("rusttv.verborgen", verborgen); } } });
+    if (!a.poort && !op) o.push(weg ? { t: "Weer tonen", doe: function () { verborgen.splice(verborgen.indexOf(a.id), 1); schrijf("rusttv.verborgen", verborgen); } }
+                                    : { t: "Verbergen", doe: function () { verborgen.push(a.id); schrijf("rusttv.verborgen", verborgen); } });
+    openMenu(o, 770, 420);
+  }
+
+  function teken() {
+    $("alle").hidden = scherm !== "alle";
+    $("inst").hidden = scherm !== "inst";
+    $("thuis").style.visibility = scherm === "thuis" ? "visible" : "hidden";
+    if (scherm === "alle") tekenAlle();
+    else if (scherm === "inst") tekenInst();
+    else tekenThuis();
+    tekenMenu();
+  }
+
+  // ---------- rust-stand: na 30 s niets doen schuiven de apps weg ----------
+  var laatsteToets = Date.now();
+  setInterval(function () {
+    if (!rust && scherm === "thuis" && !menu && bewegen < 0 && !hdmiActief && !document.hidden && Date.now() - laatsteToets > 30000) { rust = true; klasse(); }
+  }, 1000);
+  function wekOp() { laatsteToets = Date.now(); if (rust) { rust = false; klasse(); return true; } return false; }
+
   // ---------- afstandsbediening ----------
+  var TERUG = [10009, 8, 27], KLAAR = [65376], STOP = [65385];
   var okNeer = 0, okLang = null, okVerwerkt = false;
   function kort() {
-    if (scherm === "alle") return open(apps[focusAlle]);
+    if (menu) { var o = menu.opties[menu.i]; sluitMenu(); o.doe(); return teken(); }
+    if (scherm === "inst") return instOk();
+    if (scherm === "alle") {
+      var a = huidigItem(); if (!a) return;
+      if (a.soort === "inst") { scherm = "inst"; instSectie = 0; instKolom = 0; instI = 0; return teken(); }
+      if (a.soort === "toon") { toonVerborgen = !toonVerborgen; return teken(); }
+      return open(a);
+    }
+    if (zone === "muziek") return muziekKnop(muziekFocus);
     if (bewegen >= 0) { bewegen = -1; bewaar(); return teken(); }
-    if (focus === favorieten.length) { scherm = "alle"; focusAlle = 0; return teken(); }
+    if (focus === favorieten.length) { scherm = "alle"; fr = 1; fk = 0; return teken(); }
     open(app(favorieten[focus]));
   }
   function lang() {
-    if (scherm === "alle") {
-      var a = apps[focusAlle], i = favorieten.indexOf(a.id);
-      if (i >= 0) favorieten.splice(i, 1); else favorieten.push(a.id);
-      bewaar(); melding(i >= 0 ? a.naam + " van je startscherm gehaald" : a.naam + " op je startscherm gezet");
-      return teken();
-    }
-    if (focus < favorieten.length) { bewegen = focus; teken(); }
+    if (menu || scherm === "inst" || zone === "muziek") return;
+    if (scherm === "alle") return menuAlle();
+    if (bewegen < 0 && focus < favorieten.length) menuThuis();
   }
+  function isTerug(k) { return TERUG.indexOf(k) >= 0; }
   document.addEventListener("keydown", function (e) {
     var k = e.keyCode;
+    // tekst typen in een invulveld: de tv-toetsenbord regelt dat zelf
+    if (document.activeElement && document.activeElement.tagName === "INPUT") {
+      if (k === 13 || KLAAR.indexOf(k) >= 0) { e.preventDefault(); bewaarInvoer(); }
+      else if (STOP.indexOf(k) >= 0 || isTerug(k)) { e.preventDefault(); stopInvoer(); }
+      return;
+    }
     if (hdmiActief) {
-      if (k === TOETS.terug || k === TOETS.terug2 || k === TOETS.terug3) { e.preventDefault(); sluitIngang(); }
+      if (isTerug(k)) { e.preventDefault(); sluitIngang(); }
       return;
     }
-    if (k === TOETS.ok) {
+    if (wekOp()) { e.preventDefault(); if (k === 13) okNeer = -1; return; }   // eerste knop: alleen de apps terugbrengen
+    if (k === 13) {
       e.preventDefault();
-      if (!okNeer) { okNeer = Date.now(); okVerwerkt = false; okLang = setTimeout(function () { okVerwerkt = true; lang(); }, 700); }
+      if (okNeer <= 0) { okNeer = Date.now(); okVerwerkt = false; okLang = setTimeout(function () { okVerwerkt = true; lang(); }, 700); }
       return;
     }
-    if (k === TOETS.terug || k === TOETS.terug2 || k === TOETS.terug3) {
+    if (isTerug(k)) {
       e.preventDefault();
-      if (scherm === "alle") { scherm = "thuis"; teken(); }
-      else if (bewegen >= 0) { bewegen = -1; bewaar(); teken(); }
-      return; // op het startscherm doet Terug niets
+      if (menu) sluitMenu();
+      else if (scherm === "inst") { scherm = "alle"; }
+      else if (scherm === "alle") { scherm = "thuis"; }
+      else if (bewegen >= 0) { bewegen = -1; bewaar(); }
+      else if (zone === "muziek") { zone = "tegels"; }
+      return teken(); // op het startscherm doet Terug verder niets
     }
+    if (menu) {
+      if (k === 38) menu.i = Math.max(0, menu.i - 1);
+      if (k === 40) menu.i = Math.min(menu.opties.length - 1, menu.i + 1);
+      return tekenMenu();
+    }
+    if (scherm === "inst") return instToets(k);
     if (scherm === "alle") {
-      var n = apps.length;
-      if (k === TOETS.links) focusAlle = Math.max(0, focusAlle - 1);
-      if (k === TOETS.rechts) focusAlle = Math.min(n - 1, focusAlle + 1);
-      if (k === TOETS.op) focusAlle = Math.max(0, focusAlle - 6);
-      if (k === TOETS.neer) focusAlle = Math.min(n - 1, focusAlle + 6);
+      if (k === 37) fk = Math.max(0, fk - 1);
+      if (k === 39) fk = Math.min(rijen[fr].items.length - 1, fk + 1);
+      if (k === 38 && fr > 0) { fr--; fk = Math.min(fk, rijen[fr].items.length - 1); }
+      if (k === 40 && fr < rijen.length - 1) { fr++; fk = Math.min(fk, rijen[fr].items.length - 1); }
       return teken();
     }
     var max = favorieten.length;
     if (bewegen >= 0) {
-      if (k === TOETS.links && bewegen > 0) { var t = favorieten[bewegen - 1]; favorieten[bewegen - 1] = favorieten[bewegen]; favorieten[bewegen] = t; bewegen--; focus = bewegen; }
-      if (k === TOETS.rechts && bewegen < max - 1) { var u = favorieten[bewegen + 1]; favorieten[bewegen + 1] = favorieten[bewegen]; favorieten[bewegen] = u; bewegen++; focus = bewegen; }
-      if (k === TOETS.neer) { var naam = app(favorieten[bewegen]).naam; favorieten.splice(bewegen, 1); bewegen = -1; bewaar(); melding(naam + " verwijderd"); }
+      if (k === 37 && bewegen > 0) { var t = favorieten[bewegen - 1]; favorieten[bewegen - 1] = favorieten[bewegen]; favorieten[bewegen] = t; bewegen--; focus = bewegen; }
+      if (k === 39 && bewegen < max - 1) { var u = favorieten[bewegen + 1]; favorieten[bewegen + 1] = favorieten[bewegen]; favorieten[bewegen] = u; bewegen++; focus = bewegen; }
       return teken();
     }
-    if (k === TOETS.links) focus = Math.max(0, focus - 1);
-    if (k === TOETS.rechts) focus = Math.min(max, focus + 1);
+    if (zone === "muziek") {
+      if (k === 37) muziekFocus = Math.max(0, muziekFocus - 1);
+      if (k === 39) muziekFocus = Math.min(2, muziekFocus + 1);
+      if (k === 40) zone = "tegels";
+      return teken();
+    }
+    if (k === 38 && muziekZichtbaar()) { zone = "muziek"; muziekFocus = 1; return teken(); }
+    if (k === 37) focus = Math.max(0, focus - 1);
+    if (k === 39) focus = Math.min(max, focus + 1);
     teken();
   });
   document.addEventListener("keyup", function (e) {
-    if (e.keyCode !== TOETS.ok || hdmiActief) return;
+    if (e.keyCode !== 13 || hdmiActief) return;
+    if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+    if (okNeer === -1) { okNeer = 0; return; }
     clearTimeout(okLang);
-    if (!okVerwerkt) kort();
+    if (okNeer > 0 && !okVerwerkt) kort();
     okNeer = 0;
   });
 
@@ -304,13 +443,6 @@
     if (min >= z.op - 60 && min < z.op + 30) return "ochtend";
     return "nacht";
   }
-  function zetAvond(d) {
-    var dd = dagdeel(d), avond = dd === "avond" || dd === "nacht";
-    var b = document.body;
-    if (b.className.indexOf("hdmi") >= 0) return;
-    b.className = avond ? "avond" : "";
-  }
-
   // ---------- foto: elke dag een foto die past bij seizoen, weer en dagdeel ----------
   function seizoen(m) { return m === 11 || m <= 1 ? "winter" : m <= 4 ? "spring" : m <= 7 ? "summer" : "autumn"; }
   function weergroep(c) {
@@ -340,7 +472,11 @@
     x.onload = function () { try { ok(JSON.parse(x.responseText)); } catch (e) { fout(); } };
     x.onerror = x.ontimeout = fout; x.send();
   }
-  function kies(lijst, d) { return lijst.length ? lijst[(dagNr(d) * 7 + d.getFullYear()) % lijst.length] : null; }
+  // kiest elke dag(deel) een andere foto; "Andere foto" schuift één plaats op; "Nooit meer" valt weg
+  function kies(lijst, d) {
+    lijst = lijst.filter(function (f) { var u = f.thumburl || f.url; return fotoInst.nooit.indexOf(u) < 0; });
+    return lijst.length ? lijst[(dagNr(d) * 7 + d.getFullYear() + fotoInst.extra + dagdeelNr(d)) % lijst.length] : null;
+  }
   function zoekOpenverse(q, d, ok, fout) {
     haal("https://api.openverse.org/v1/images/?q=" + encodeURIComponent(q) + "&category=photograph&aspect_ratio=wide&size=large&mature=false&page_size=30", function (j) {
       var l = (j.results || []).filter(function (r) { return r.url && r.width >= 1600 && r.width <= 4200 && r.width > r.height * 1.3; });
@@ -361,47 +497,308 @@
       ok({ url: f.thumburl || f.url, maker: maker, licentie: m.LicenseShortName ? m.LicenseShortName.value : "", titel: "" });
     }, fout);
   }
+  function zetAvond(d) {
+    var dd = dagdeel(d), nu = dd === "avond" || dd === "nacht";
+    if (nu !== avond) { avond = nu; klasse(); }
+  }
+  function dagdeelNr(d) { return { ochtend: 0, dag: 1, avond: 2, nacht: 3 }[dagdeel(d)]; }
+
+  // ---------- foto's: online, eigen album, of afwisselend ----------
+  // Alles wordt alleen op deze tv bewaard (niet op GitHub).
+  var fotoInst = lees("rusttv.fotoinst", null) || {};
+  if (!fotoInst.bron) fotoInst.bron = "online";
+  fotoInst.vaker = fotoInst.vaker || []; fotoInst.nooit = fotoInst.nooit || []; fotoInst.extra = fotoInst.extra || 0; fotoInst.album = fotoInst.album || "";
+  function bewaarFotoInst() { schrijf("rusttv.fotoinst", fotoInst); }
+  var huidigeFoto = null;
   function toonFoto(f) {
     var img = new Image();
     img.onload = function () {
+      huidigeFoto = f;
       $("foto").style.backgroundImage = "url(\"" + f.url + "\")";
       $("foto").className = "zichtbaar";
-      $("bron").textContent = "Foto: " + (f.maker ? f.maker.slice(0, 60) : "onbekend") + (f.licentie ? " · " + f.licentie : "");
+      $("bron").textContent = f.eigen ? "" : "Foto: " + (f.maker ? f.maker.slice(0, 60) : "onbekend") + (f.licentie ? " · " + f.licentie : "");
     };
     img.src = f.url;
   }
-  function foto() {
-    var d = new Date(), q = fotoZoekterm(d), sleutel = d.toDateString() + "|" + q;
-    if (sleutel === fotoSleutel) return;
-    fotoSleutel = sleutel;
-    try { var b = JSON.parse(localStorage.getItem("rusttv.foto") || "null"); if (b && b.sleutel === sleutel) return toonFoto(b.foto); } catch (e) {}
-    function klaar(f) { try { localStorage.setItem("rusttv.foto", JSON.stringify({ sleutel: sleutel, foto: f })); } catch (e) {} toonFoto(f); }
+  function hash(t) { var h = 0; for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return Math.abs(h); }
+
+  // Gedeeld Google Foto's-album: de openbare albumpagina lezen en de foto-adressen eruit halen
+  var albumLijst = lees("rusttv.albumlijst", null);
+  function laadAlbum(ok, fout) {
+    var vandaag = new Date().toDateString();
+    if (albumLijst && albumLijst.link === fotoInst.album && albumLijst.dag === vandaag && albumLijst.lijst.length) return ok(albumLijst.lijst);
+    if (!fotoInst.album) return fout("Nog geen album gekoppeld");
+    var x = new XMLHttpRequest();
+    x.open("GET", fotoInst.album); x.timeout = 20000;
+    x.onload = function () {
+      var re = /\["(https:\/\/lh3\.googleusercontent\.com\/pw\/[^"\\]+)",(\d+),(\d+)/g, m, gezien = {}, l = [];
+      while ((m = re.exec(x.responseText))) { if (!gezien[m[1]]) { gezien[m[1]] = 1; l.push({ u: m[1], w: +m[2], h: +m[3] }); } }
+      var breed = l.filter(function (f) { return f.w >= f.h; });
+      if (breed.length >= 3) l = breed;              // liefst liggende foto's
+      var lijst = l.map(function (f) { return f.u; });
+      if (!lijst.length) return fout(x.status === 200 ? "Geen foto's gevonden in het album" : "Album niet bereikbaar");
+      albumLijst = { link: fotoInst.album, dag: vandaag, lijst: lijst }; schrijf("rusttv.albumlijst", albumLijst);
+      ok(lijst);
+    };
+    x.onerror = x.ontimeout = function () { albumLijst && albumLijst.link === fotoInst.album && albumLijst.lijst.length ? ok(albumLijst.lijst) : fout("Album niet bereikbaar"); };
+    x.send();
+  }
+  function kiesAlbum(lijst, sleutel) {
+    var pot = [];
+    lijst.forEach(function (u) { if (fotoInst.nooit.indexOf(u) < 0) pot.push(u); });
+    fotoInst.vaker.forEach(function (u) { if (lijst.indexOf(u) >= 0) { pot.push(u); pot.push(u); } });   // vaker = 3 keer zoveel kans
+    if (!pot.length) return null;
+    var u = pot[(hash(sleutel) + fotoInst.extra) % pot.length];
+    return { url: u + "=w1920-h1080", sleutel: u, eigen: true };
+  }
+  function fotoOnline(d, q, klaar) {
+    // ook een online foto die je "vaker" wil zien, komt soms terug
+    var fav = fotoInst.vaker.filter(function (u) { return u.indexOf("googleusercontent") < 0; });
+    if (fav.length && hash(q + d.toDateString()) % 4 === 0) return klaar({ url: fav[(dagNr(d) + fotoInst.extra) % fav.length], maker: "", licentie: "" });
     zoekOpenverse(q, d, klaar, function () {
       zoekCommons(q, d, klaar, function () {
-        // ruimer zoeken: alleen seizoen + landschap
         zoekCommons(seizoen(d.getMonth()) + " landscape", d, klaar, function () {});
       });
     });
   }
+  function foto(nu) {
+    var d = new Date(), q = fotoZoekterm(d), sleutel = d.toDateString() + "|" + q + "|" + fotoInst.bron + "|" + fotoInst.extra;
+    if (!nu && sleutel === fotoSleutel) return;
+    fotoSleutel = sleutel;
+    var b = lees("rusttv.foto", null);
+    if (!nu && b && b.sleutel === sleutel && b.foto) return toonFoto(b.foto);
+    function klaar(f) { schrijf("rusttv.foto", { sleutel: sleutel, foto: f }); toonFoto(f); }
+    var bron = fotoInst.bron;
+    if (bron === "mix") bron = hash(d.toDateString()) % 4 + dagdeelNr(d) & 1 ? "album" : "online";
+    if (bron === "album") {
+      laadAlbum(function (lijst) { var f = kiesAlbum(lijst, sleutel); f ? klaar(f) : fotoOnline(d, q, klaar); },
+        function () { fotoOnline(d, q, klaar); });   // geen album: dan toch een online foto
+    } else fotoOnline(d, q, klaar);
+  }
+  function fotoActie(soort) {
+    if (!huidigeFoto) return melding("Er is nog geen foto");
+    var u = huidigeFoto.sleutel || huidigeFoto.url;
+    if (soort === "vaker") { if (fotoInst.vaker.indexOf(u) < 0) fotoInst.vaker.push(u); melding("Deze foto komt vaker terug"); }
+    if (soort === "nooit") { if (fotoInst.nooit.indexOf(u) < 0) fotoInst.nooit.push(u); fotoInst.extra++; melding("Deze foto zie je niet meer"); }
+    if (soort === "andere") fotoInst.extra++;
+    bewaarFotoInst(); foto(true);
+  }
 
-  // ---------- start ----------
-  // De wachter starten (opent Rust TV als de tv wakker wordt)
+  // ---------- Spotify ----------
+  // Koppelen: op je gsm de koppelpagina openen, inloggen, de code kopiëren en hier plakken.
+  // De sleutel wordt alleen op deze tv bewaard.
+  var sp = lees("rusttv.spotify", null);   // {client, refresh, access, tot}
+  var nuSpeelt = null, spTimer = null, spBezig = false;
+  function bewaarSp() { schrijf("rusttv.spotify", sp); }
+  function spVraag(methode, pad, ok, fout, opnieuw) {
+    if (!sp) return fout && fout("niet gekoppeld");
+    if (!sp.access || Date.now() > sp.tot - 60000) return vernieuwToken(function () { spVraag(methode, pad, ok, fout, true); }, fout);
+    var x = new XMLHttpRequest();
+    x.open(methode, "https://api.spotify.com/v1" + pad); x.timeout = 8000;
+    x.setRequestHeader("Authorization", "Bearer " + sp.access);
+    x.onload = function () {
+      if (x.status === 401 && !opnieuw) { sp.access = null; return spVraag(methode, pad, ok, fout, true); }
+      if (x.status >= 200 && x.status < 300) { var j = null; try { j = x.responseText ? JSON.parse(x.responseText) : null; } catch (e) {} ok && ok(j, x.status); }
+      else fout && fout(x.status === 403 ? "Spotify Premium nodig of geen toestel actief" : "fout " + x.status);
+    };
+    x.onerror = x.ontimeout = function () { fout && fout("geen verbinding"); };
+    x.send();
+  }
+  function vernieuwToken(ok, fout) {
+    var x = new XMLHttpRequest();
+    x.open("POST", "https://accounts.spotify.com/api/token"); x.timeout = 8000;
+    x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+    x.onload = function () {
+      try {
+        var j = JSON.parse(x.responseText);
+        if (!j.access_token) throw 0;
+        sp.access = j.access_token; sp.tot = Date.now() + j.expires_in * 1000;
+        if (j.refresh_token) sp.refresh = j.refresh_token;
+        bewaarSp(); ok();
+      } catch (e) { fout && fout("koppeling verlopen: opnieuw koppelen"); }
+    };
+    x.onerror = x.ontimeout = function () { fout && fout("geen verbinding"); };
+    x.send("grant_type=refresh_token&refresh_token=" + encodeURIComponent(sp.refresh) + "&client_id=" + encodeURIComponent(sp.client));
+  }
+  function haalSpeler() {
+    if (!sp || hdmiActief || document.hidden || spBezig) return;
+    spBezig = true;
+    spVraag("GET", "/me/player?additional_types=episode", function (j, st) {
+      spBezig = false;
+      nuSpeelt = st === 204 || !j || !j.item ? null : {
+        titel: j.item.name, artiest: j.item.artists ? j.item.artists.map(function (a) { return a.name; }).join(", ") : (j.item.show ? j.item.show.name : ""),
+        hoes: (j.item.album && j.item.album.images && j.item.album.images.length ? j.item.album.images[j.item.album.images.length > 1 ? 1 : 0].url : (j.item.images && j.item.images[0] ? j.item.images[0].url : "")),
+        speelt: j.is_playing, pos: j.progress_ms || 0, duur: j.item.duration_ms || 1, toen: Date.now(), toestel: j.device ? j.device.name : ""
+      };
+      tekenMuziek();
+    }, function () { spBezig = false; nuSpeelt = null; tekenMuziek(); });
+  }
+  function muziekZichtbaar() { return !!nuSpeelt; }
+  function tekenMuziek() {
+    var w = $("muziek");
+    if (!nuSpeelt) { w.hidden = true; if (zone === "muziek") { zone = "tegels"; teken(); } return; }
+    w.hidden = false;
+    $("mTitel").textContent = nuSpeelt.titel;
+    $("mArtiest").textContent = nuSpeelt.artiest;
+    $("mBron").textContent = "SPOTIFY" + (nuSpeelt.toestel ? " · " + nuSpeelt.toestel.toUpperCase() : "");
+    if ($("mHoes").getAttribute("src") !== nuSpeelt.hoes) $("mHoes").setAttribute("src", nuSpeelt.hoes);
+    $("mSpeel").className = "mk" + (nuSpeelt.speelt ? " pauze" : " speel");
+    tekenBalk(); tekenMuziekFocus();
+  }
+  function tekenBalk() {
+    if (!nuSpeelt) return;
+    var p = nuSpeelt.pos + (nuSpeelt.speelt ? Date.now() - nuSpeelt.toen : 0);
+    $("mVoort").style.width = Math.min(100, p / nuSpeelt.duur * 100) + "%";
+  }
+  function tekenMuziekFocus() {
+    var w = $("muziek"); if (!w) return;
+    w.className = zone === "muziek" ? "focus" : "";
+    var k = [$("mVorige"), $("mSpeel"), $("mVolgende")];
+    k.forEach(function (el, i) { el.className = el.className.replace(" gekozen", "") + (zone === "muziek" && i === muziekFocus ? " gekozen" : ""); });
+  }
+  function muziekKnop(i) {
+    if (!nuSpeelt) return;
+    var pad = i === 0 ? ["POST", "/me/player/previous"] : i === 2 ? ["POST", "/me/player/next"] : nuSpeelt.speelt ? ["PUT", "/me/player/pause"] : ["PUT", "/me/player/play"];
+    if (i === 1) { nuSpeelt.pos += nuSpeelt.speelt ? Date.now() - nuSpeelt.toen : 0; nuSpeelt.toen = Date.now(); nuSpeelt.speelt = !nuSpeelt.speelt; tekenMuziek(); }
+    spVraag(pad[0], pad[1], function () { setTimeout(haalSpeler, 700); }, function (f) { melding("Spotify: " + f); setTimeout(haalSpeler, 700); });
+  }
+  function startSpotify() {
+    clearInterval(spTimer);
+    if (!sp) { nuSpeelt = null; tekenMuziek(); return; }
+    haalSpeler();
+    spTimer = setInterval(function () { if (!rust || Date.now() % 15000 < 5000) haalSpeler(); }, 5000);
+  }
+  setInterval(tekenBalk, 1000);
+  function koppelSpotify(code) {
+    var t = (code || "").replace(/\s+/g, ""), i = t.indexOf(":");
+    if (i < 10) return melding("Die code klopt niet. Kopieer hem opnieuw op je gsm.");
+    sp = { client: t.slice(0, i), refresh: t.slice(i + 1), access: null, tot: 0 };
+    vernieuwToken(function () { bewaarSp(); melding("Spotify is gekoppeld"); startSpotify(); teken(); },
+      function (f) { sp = null; melding("Koppelen lukt niet: " + f); teken(); });
+  }
+
+  // ---------- instellingen ----------
+  var SECTIES = ["Foto's", "Spotify", "Wachter", "Over Rust TV"];
+  var instSectie = 0, instKolom = 0, instI = 0, wachterStatus = "onbekend";
+  var invoerDoel = null;
+  function instItems() {
+    if (instSectie === 0) return [
+      { t: "Online, volgens seizoen en weer", s: "Elke dag een nieuwe foto die past bij het weer in Wevelgem", keuze: "online" },
+      { t: "Mijn album", s: "Alleen foto's uit je gedeelde Google Foto's-album", keuze: "album" },
+      { t: "Afwisselend", s: "Je eigen foto's en online foto's door elkaar", keuze: "mix" },
+      { t: "Albumlink", s: fotoInst.album ? fotoInst.album : "Nog niet ingesteld · druk op OK om de link te typen of te plakken", invoer: "album" },
+      { t: "Andere foto", s: "Nu een andere foto tonen", doe: function () { fotoActie("andere"); } },
+      { t: "Vaker tonen", s: "De foto van nu komt vaker terug", doe: function () { fotoActie("vaker"); } },
+      { t: "Nooit meer tonen", s: "De foto van nu zie je niet meer", doe: function () { fotoActie("nooit"); } }
+    ];
+    if (instSectie === 1) return sp ? [
+      { t: "Gekoppeld", s: nuSpeelt ? "Nu: " + nuSpeelt.titel + " · " + nuSpeelt.artiest : "Er speelt nu niets" },
+      { t: "Ontkoppelen", s: "Spotify loskoppelen van deze tv", doe: function () { sp = null; schrijf("rusttv.spotify", null); startSpotify(); melding("Spotify losgekoppeld"); } }
+    ] : [
+      { t: "1. Open op je gsm", s: "jitsevanhauwaert.github.io/rust-tv/spotify.html · log in en tik op Kopieer" },
+      { t: "2. Plak hier de code", s: "Druk op OK. Plak met het toetsenbord van de SmartThings-app op je gsm.", invoer: "spotify" }
+    ];
+    if (instSectie === 2) return [
+      { t: "Wachter " + (wachterStatus === "actief" ? "actief" : wachterStatus === "uit" ? "niet actief" : "…"), s: "Opent Rust TV vanzelf als de tv aangaat", status: true },
+      { t: "Wachter opnieuw starten", s: "Als hij niet actief is", doe: function () { startWachter(); setTimeout(checkWachter, 1500); } }
+    ];
+    return [{ t: "Rust TV", s: "Versie 1.6 · haalt updates zelf van GitHub" }];
+  }
+  function tekenInst() {
+    var inv = $("invoer");
+    if (invoerDoel && document.activeElement === inv) return;   // niet storen tijdens het typen
+    document.body.appendChild(inv);
+    var m = $("instMenu"); m.innerHTML = "";
+    SECTIES.forEach(function (t, i) { var d = document.createElement("div"); d.className = "sectie" + (i === instSectie ? " gekozen" : "") + (instKolom === 0 && i === instSectie ? " focus" : ""); d.textContent = t; m.appendChild(d); });
+    var p = $("instPaneel"); p.innerHTML = "";
+    var h = document.createElement("h2"); h.textContent = instSectie === 0 ? "Waar komen de foto's vandaan?" : SECTIES[instSectie]; p.appendChild(h);
+    var items = instItems(); if (instI >= items.length) instI = items.length - 1;
+    items.forEach(function (it, i) {
+      var d = document.createElement("div");
+      d.className = "item" + (instKolom === 1 && i === instI ? " focus" : "") + (it.status ? (wachterStatus === "actief" ? " groen" : " rood") : "");
+      if (it.keuze) { var r = document.createElement("span"); r.className = "rond" + (fotoInst.bron === it.keuze ? " aan" : ""); d.appendChild(r); }
+      var tx = document.createElement("div"); tx.className = "tekst";
+      var a = document.createElement("div"); a.className = "t"; a.textContent = it.t; tx.appendChild(a);
+      if (it.s) { var b = document.createElement("div"); b.className = "s"; b.textContent = it.s; tx.appendChild(b); }
+      d.appendChild(tx);
+      if (it.invoer && invoerDoel === it.invoer) { tx.appendChild($("invoer")); }
+      p.appendChild(d);
+    });
+    $("wachterLampje").className = wachterStatus === "actief" ? "aan" : "";
+  }
+  function instToets(k) {
+    if (k === 37) instKolom = 0;
+    if (k === 39) { instKolom = 1; instI = 0; }
+    if (k === 38) { if (instKolom === 0) instSectie = Math.max(0, instSectie - 1); else instI = Math.max(0, instI - 1); }
+    if (k === 40) { if (instKolom === 0) instSectie = Math.min(SECTIES.length - 1, instSectie + 1); else instI = Math.min(instItems().length - 1, instI + 1); }
+    if (instKolom === 0) instI = 0;
+    if (instSectie === 2) checkWachter();
+    teken();
+  }
+  function instOk() {
+    if (instKolom === 0) { instKolom = 1; instI = 0; return teken(); }
+    var it = instItems()[instI]; if (!it) return;
+    if (it.keuze) { fotoInst.bron = it.keuze; fotoInst.extra = 0; bewaarFotoInst(); foto(true); return teken(); }
+    if (it.invoer) return startInvoer(it.invoer);
+    if (it.doe) { it.doe(); return teken(); }
+  }
+  function startInvoer(doel) {
+    invoerDoel = doel; teken();
+    var i = $("invoer"); i.hidden = false;
+    i.value = doel === "album" ? fotoInst.album : "";
+    i.placeholder = doel === "album" ? "https://photos.app.goo.gl/…" : "plak hier de code van je gsm";
+    setTimeout(function () { i.focus(); }, 50);
+  }
+  function bewaarInvoer() {
+    var i = $("invoer"), v = i.value.trim(), doel = invoerDoel;
+    stopInvoer();
+    if (doel === "album") {
+      if (v && !/^https:\/\/(photos\.app\.goo\.gl|photos\.google\.com|goo\.gl)\//.test(v)) { melding("Dat lijkt geen link van Google Foto's"); return teken(); }
+      fotoInst.album = v; albumLijst = null; bewaarFotoInst();
+      if (v) { melding("Album gekoppeld, de foto's worden geladen…"); laadAlbum(function (l) { melding(l.length + " foto's gevonden"); if (fotoInst.bron === "online") fotoInst.bron = "mix"; bewaarFotoInst(); foto(true); teken(); }, function (f) { melding(f); }); }
+    }
+    if (doel === "spotify" && v) koppelSpotify(v);
+    teken();
+  }
+  function stopInvoer() {
+    var i = $("invoer"); i.blur(); i.hidden = true; document.body.appendChild(i);
+    invoerDoel = null; teken();
+  }
+
+  // ---------- wachter ----------
+  var WACHTER = "RustTVjvh1.Wachter";
   function startWachter() {
     if (!window.tizen || !tizen.application || !tizen.ApplicationControl) return;
     try {
       tizen.application.launchAppControl(
-        new tizen.ApplicationControl("http://tizen.org/appcontrol/operation/service"),
-        "RustTVjvh1.Wachter",
-        function () {},
-        function (e) { melding("Wachter start niet: " + (e && e.message ? e.message : e)); });
-    } catch (e) { melding("Wachter start niet: " + (e && e.message ? e.message : e)); }
+        new tizen.ApplicationControl("http://tizen.org/appcontrol/operation/service"), WACHTER,
+        function () { wachterStatus = "actief"; },
+        function (e) { wachterStatus = "uit"; melding("Wachter start niet: " + (e && e.message ? e.message : e)); });
+    } catch (e) { wachterStatus = "uit"; melding("Wachter start niet: " + (e && e.message ? e.message : e)); }
   }
+  function checkWachter() {
+    if (!window.tizen || !tizen.application) return;
+    try {
+      tizen.application.getAppsContext(function (l) {
+        var aan = l.some(function (c) { return c.appId === WACHTER; });
+        wachterStatus = aan ? "actief" : "uit";
+        if (!aan) startWachter();
+        if (scherm === "inst") tekenInst();
+      }, function () {});
+    } catch (e) {}
+  }
+
+  // ---------- start ----------
   startWachter();
-  laadApps(function () { laadFavorieten(); teken(); });
+  setTimeout(checkWachter, 3000);
+  setInterval(checkWachter, 60000);      // elke minuut: draait de wachter nog? anders opnieuw starten
+  laadApps(function () { laadFavorieten(); laadVerborgen(); teken(); });
   klok(); setInterval(klok, 15000);
   weer(); setInterval(weer, 30 * 60000);
+  startSpotify();
   // Komt de app terug in beeld (na Netflix bv.): lijst en klok vernieuwen
   document.addEventListener("visibilitychange", function () {
     if (document.hidden && hdmiActief) sluitIngang();
-    if (!document.hidden) { startWachter(); klok(); laadApps(function () { laadFavorieten(); teken(); }); } });
+    if (!document.hidden) { laatsteToets = Date.now(); rust = false; klasse(); startWachter(); klok(); haalSpeler(); laadApps(function () { laadFavorieten(); teken(); }); }
+  });
 })();

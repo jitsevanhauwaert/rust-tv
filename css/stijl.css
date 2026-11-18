@@ -13,10 +13,10 @@ main,#alle{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-dir
 .tegel.focus{transform:scale(1.1);border-color:#F6F2EC;background:rgba(20,20,30,.45)}
 .tegel.beweeg{border-color:#F2C76E;border-style:dashed}
 #hint{position:absolute;bottom:90px;font-size:22px;opacity:.55}
-#alle{background:rgba(10,12,20,.82);padding-top:70px}
+#alle{background:#12151d;padding-top:60px}
 #alle h2{font-size:48px;font-weight:400;margin:0}
 .uitleg{font-size:24px;opacity:.7;margin:12px 0 30px}
-#raster{display:grid;grid-template-columns:repeat(6,230px);grid-gap:28px;max-height:780px;overflow:hidden}
+#raster{width:1720px;height:860px;overflow:hidden;position:relative;padding:12px;box-sizing:border-box}
 .tegel .ster{position:absolute;top:10px;right:16px;font-size:26px;color:#F2C76E}
 #bewerk{position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:26px}
 #bewerk span{margin:0 15px}
@@ -46,3 +46,76 @@ body.avond #klok{font-size:240px}
 #bron{position:absolute;bottom:22px;right:36px;font-size:16px;opacity:.45;max-width:700px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #klok,#datum,#weer,#hint{text-shadow:0 2px 24px rgba(0,0,0,.4)}
 body.hdmi #foto,body.hdmi #sluier,body.hdmi #bron{display:none}
+
+/* ---------- v1.6 ---------- */
+/* rust-stand: tegels schuiven weg, klok groter */
+.rij{transition:transform 1s ease,opacity 1s ease}
+.boven{transition:margin-top 1s ease}
+#klok{transition:font-size 1s ease}
+body.rust .rij{transform:translateY(420px);opacity:0}
+body.rust .boven{margin-top:290px}
+body.rust #klok{font-size:260px}
+
+/* Spotify-widget */
+#muziek{position:absolute;top:56px;left:64px;width:560px;box-sizing:border-box;padding:22px;border-radius:28px;background:rgba(12,14,22,.48);border:4px solid transparent;display:flex;align-items:center;transition:opacity 1s,transform 1s}
+#muziek.focus{border-color:#F6F2EC}
+#mHoes{width:104px;height:104px;border-radius:16px;object-fit:cover;margin-right:22px;background:rgba(255,255,255,.1);flex:none}
+.mtekst{flex:1;min-width:0}
+#mBron{font-size:16px;letter-spacing:2px;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mTitel{font-size:30px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mArtiest{font-size:22px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mBalk{height:4px;background:rgba(255,255,255,.2);border-radius:2px;margin-top:14px}
+#mVoort{height:4px;background:#F6F2EC;border-radius:2px;width:0;transition:width 1s linear}
+#mKnoppen{display:flex;align-items:center;margin-top:12px}
+.mk{width:54px;height:54px;border-radius:27px;display:flex;align-items:center;justify-content:center;margin-right:24px}
+.mk svg{width:30px;height:30px;fill:none;stroke:#F6F2EC;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.mk.speel .ip,.mk.pauze .is{display:none}
+#mSpeel{background:rgba(255,255,255,.18)}
+.mk.gekozen{background:#F6F2EC!important}
+.mk.gekozen svg{stroke:#12151d}
+body.rust #muziek{transform:scale(.72);transform-origin:0 0;opacity:.8;background:transparent;border-color:transparent}
+body.rust #mBalk,body.rust #mKnoppen,body.rust #mBron{display:none}
+body.hdmi #muziek{display:none}
+
+/* klein menu */
+#menu{position:absolute;width:380px;box-sizing:border-box;padding:12px;border-radius:28px;background:rgba(12,14,22,.82)}
+#menu .optie{padding:16px 26px;border-radius:14px;font-size:28px}
+#menu .optie.focus{background:rgba(255,255,255,.18)}
+
+/* Alle apps in groepen */
+#alle h2{width:1700px;text-align:left}
+.groep{font-size:26px;font-weight:600;margin:30px 0 16px;opacity:.85}
+.apprij{display:flex;margin-bottom:22px}
+.apprij .tegel{margin-right:22px}
+.knoprij{display:flex;margin:18px 0 4px}
+.knop{padding:16px 28px;border-radius:16px;background:rgba(255,255,255,.08);font-size:26px;border:4px solid transparent}
+.knop.focus{border-color:#F6F2EC;background:rgba(255,255,255,.16)}
+.tegel.klein{width:220px;height:120px;border-radius:22px;font-size:24px;background:rgba(255,255,255,.1)}
+.tegel.klein.logo img{width:84px;height:84px}
+.tegel.klein.focus{transform:scale(1.06)}
+.tegel.grijs{opacity:.6}
+#alle .uitleg{position:absolute;bottom:36px;margin:0}
+
+/* instellingen */
+#inst{position:absolute;top:0;left:0;width:1920px;height:1080px;background:#12151d;display:flex}
+#instLinks{width:460px;padding:70px 40px;box-sizing:border-box;border-right:1px solid rgba(255,255,255,.08)}
+#instLinks h1{font-size:44px;font-weight:400;margin:0 0 36px 26px}
+.sectie{padding:18px 26px;border-radius:16px;font-size:30px;opacity:.7;border:4px solid transparent}
+.sectie.gekozen{opacity:1;background:rgba(255,255,255,.1)}
+.sectie.focus{border-color:#F6F2EC}
+#wachterRegel{margin:60px 0 0 26px;font-size:22px;opacity:.7;display:flex;align-items:center}
+#wachterLampje{width:14px;height:14px;border-radius:7px;background:#d16b6b;margin-right:12px}
+#wachterLampje.aan{background:#7fd18b}
+#instPaneel{flex:1;padding:70px 90px;box-sizing:border-box}
+#instPaneel h2{font-size:40px;font-weight:400;margin:0 0 26px}
+.item{display:flex;align-items:flex-start;padding:18px 24px;border-radius:18px;border:4px solid transparent;margin-bottom:6px}
+.item.focus{border-color:#F6F2EC;background:rgba(255,255,255,.1)}
+.item .t{font-size:30px}
+.item .s{font-size:22px;opacity:.65;margin-top:4px;max-width:1150px;word-break:break-all}
+.item.groen .t{color:#9be3a6}
+.item.rood .t{color:#f0a0a0}
+.rond{width:30px;height:30px;border-radius:15px;border:3px solid #F6F2EC;box-sizing:border-box;margin:4px 22px 0 0;flex:none;position:relative}
+.rond.aan:after{content:"";position:absolute;top:5px;left:5px;width:14px;height:14px;border-radius:7px;background:#F6F2EC}
+#invoer{display:block;margin-top:14px;width:1100px;font-size:28px;padding:14px 18px;border-radius:12px;border:3px solid #F6F2EC;background:#1c2130;color:#F6F2EC;font-family:inherit}
+#invoer[hidden]{display:none}
+#melding{z-index:10}
