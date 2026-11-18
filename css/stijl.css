@@ -23,3 +23,26 @@ main,#alle{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-dir
 #bewerkNaam{font-weight:700}
 #melding{position:absolute;top:40px;right:60px;background:rgba(0,0,0,.6);padding:16px 24px;border-radius:16px;font-size:24px}
 [hidden]{display:none!important}
+
+/* HDMI-ingang: alles doorzichtig zodat het beeld van de PlayStation of Chromecast zichtbaar is */
+body.hdmi,html.hdmi{background:transparent}
+body.hdmi #lucht,body.hdmi #zon,body.hdmi main,body.hdmi #alle,body.hdmi #bewerk{display:none}
+.tegel .ingang{font-size:20px;opacity:.7;margin-top:6px}
+
+/* Tegels met logo: alleen het logo, groot en rustig */
+.tegel.logo .naam{display:none}
+.tegel.logo img{width:110px;height:110px;margin:0}
+.tegel.logo.wit img{width:96px;height:96px}
+/* zwarte reservelogo's wit maken (cdn-kleur is al wit, dit doet dan niets) */
+.tegel.wit img{-webkit-filter:brightness(0) invert(1);filter:brightness(0) invert(1)}
+
+/* ---------- v1.4: foto-achtergrond (ontwerp A overdag, C 's avonds) ---------- */
+#foto,#sluier{position:absolute;top:0;left:0;width:1920px;height:1080px}
+#foto{background-size:cover;background-position:center;opacity:0;transition:opacity 3s}
+#foto.zichtbaar{opacity:1}
+#sluier{background:linear-gradient(180deg,rgba(10,12,20,.38) 0%,rgba(10,12,20,0) 38%,rgba(10,12,20,0) 55%,rgba(10,12,20,.5) 100%);transition:background 3s}
+body.avond #sluier{background:radial-gradient(ellipse at 50% 45%,rgba(10,12,20,.25) 0%,rgba(10,12,20,.6) 75%,rgba(10,12,20,.8) 100%)}
+body.avond #klok{font-size:240px}
+#bron{position:absolute;bottom:22px;right:36px;font-size:16px;opacity:.45;max-width:700px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#klok,#datum,#weer,#hint{text-shadow:0 2px 24px rgba(0,0,0,.4)}
+body.hdmi #foto,body.hdmi #sluier,body.hdmi #bron{display:none}
