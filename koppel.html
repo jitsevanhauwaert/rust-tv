@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rust TV · koppelen</title>
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#12151d;color:#F6F2EC;line-height:1.5}
+  main{max-width:520px;margin:0 auto;padding:28px 22px 60px}
+  h1{font-size:26px;font-weight:600;margin:0 0 6px}
+  p{opacity:.85}
+  label{display:block;font-size:15px;opacity:.8;margin:22px 0 6px}
+  input{width:100%;box-sizing:border-box;font-size:17px;padding:13px 14px;border-radius:12px;border:2px solid #3a4152;background:#1c2130;color:#F6F2EC;font-family:inherit}
+  #code{font-size:28px;letter-spacing:6px;text-transform:uppercase;text-align:center}
+  button{margin-top:16px;width:100%;font-size:18px;padding:14px;border-radius:14px;border:0;background:#F6F2EC;color:#12151d;font-weight:600}
+  .tabs{display:flex;gap:10px;margin-top:26px}
+  .tabs button{margin:0;background:rgba(255,255,255,.08);color:#F6F2EC}
+  .tabs button.aan{background:#F6F2EC;color:#12151d}
+  .vak{background:rgba(255,255,255,.06);border-radius:16px;padding:6px 18px 18px;margin-top:16px}
+  .ok{color:#9be3a6}.fout{color:#f0a0a0}
+  .klein{font-size:14px;opacity:.65;word-break:break-all}
+</style>
+</head>
+<body>
+<main>
+  <h1>Rust TV koppelen</h1>
+  <p>Typ de code die op je tv staat. Je gsm stuurt de gegevens rechtstreeks naar je tv; ze worden nergens bewaard.</p>
+
+  <label for="code">Code op je tv</label>
+  <input id="code" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD EFGH">
+
+  <div class="tabs">
+    <button type="button" id="tAlbum" class="aan">Fotoalbum</button>
+    <button type="button" id="tSpotify">Spotify</button>
+  </div>
+
+  <section id="album" class="vak">
+    <label for="link">Link van je gedeelde Google Foto's-album</label>
+    <input id="link" autocomplete="off" spellcheck="false" placeholder="https://photos.app.goo.gl/…">
+    <button type="button" id="stuurAlbum">Naar de tv sturen</button>
+  </section>
+
+  <section id="spotify" class="vak" hidden>
+    <label for="client">Client ID van je Spotify-app</label>
+    <input id="client" autocomplete="off" spellcheck="false" placeholder="32 tekens, van developer.spotify.com">
+    <button type="button" id="login">Inloggen bij Spotify</button>
+    <p class="klein">Redirect URI voor je Spotify-app:<br><b id="terug"></b></p>
+  </section>
+
+  <p id="melding"></p>
+</main>
+<script>
+(function () {
+  var TERUG = location.origin + location.pathname;
+  var SCOPE = "user-read-playback-state user-modify-playback-state user-read-currently-playing";
+  var $ = function (id) { return document.getElementById(id); };
+  $("terug").textContent = TERUG;
+  $("client").value = localStorage.getItem("rusttv.client") || "";
+  $("code").value = sessionStorage.getItem("rusttv.code") || "";
+
+  function meld(t, goed) { $("melding").textContent = t; $("melding").className = goed ? "ok" : "fout"; }
+  function code() {
+    var c = $("code").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!/^[A-Z0-9]{8}$/.test(c)) { meld("Typ eerst de code van 8 tekens die op je tv staat."); return null; }
+    sessionStorage.setItem("rusttv.code", c);
+    return c;
+  }
+  function stuur(c, soort, waarde) {
+    // cache=no: ntfy bewaart niets, alleen de tv die nu luistert krijgt het
+    return fetch("https://ntfy.sh/rusttv-" + c.toLowerCase() + "?cache=no", {
+      method: "POST", mode: "no-cors", body: JSON.stringify({ soort: soort, waarde: waarde })
+    }).then(function () { meld("Verstuurd! Kijk op je tv. Verschijnt daar niets, controleer dan de code.", true); },
+      function () { meld("Versturen lukte niet. Heb je internet op je gsm?"); });
+  }
+  function tab(welk) {
+    $("album").hidden = welk !== "album"; $("spotify").hidden = welk !== "spotify";
+    $("tAlbum").className = welk === "album" ? "aan" : ""; $("tSpotify").className = welk === "spotify" ? "aan" : "";
+  }
+  $("tAlbum").onclick = function () { tab("album"); };
+  $("tSpotify").onclick = function () { tab("spotify"); };
+
+  $("stuurAlbum").onclick = function () {
+    var c = code(); if (!c) return;
+    var l = $("link").value.trim();
+    if (!/^https:\/\/(photos\.app\.goo\.gl|photos\.google\.com|goo\.gl)\//.test(l)) return meld("Dat lijkt geen link van een gedeeld Google Foto's-album.");
+    stuur(c, "album", l);
+  };
+
+  function willekeurig(n) {
+    var a = new Uint8Array(n), t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    crypto.getRandomValues(a);
+    return Array.prototype.map.call(a, function (b) { return t[b % 62]; }).join("");
+  }
+  function b64url(buf) {
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  $("login").onclick = function () {
+    if (!code()) return;
+    var client = $("client").value.trim();
+    if (!/^[0-9a-f]{32}$/i.test(client)) return meld("Die Client ID klopt niet: het zijn 32 tekens (cijfers en letters a-f).");
+    localStorage.setItem("rusttv.client", client);
+    var verifier = willekeurig(64);
+    sessionStorage.setItem("rusttv.verifier", verifier);
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)).then(function (h) {
+      location.href = "https://accounts.spotify.com/authorize?response_type=code&client_id=" + encodeURIComponent(client) +
+        "&scope=" + encodeURIComponent(SCOPE) + "&redirect_uri=" + encodeURIComponent(TERUG) +
+        "&code_challenge_method=S256&code_challenge=" + b64url(h);
+    });
+  };
+
+  // terug van Spotify
+  var q = new URLSearchParams(location.search);
+  if (q.get("error")) { tab("spotify"); meld("Spotify gaf een fout: " + q.get("error")); history.replaceState(null, "", TERUG); }
+  if (q.get("code")) {
+    tab("spotify");
+    var client = localStorage.getItem("rusttv.client"), verifier = sessionStorage.getItem("rusttv.verifier");
+    history.replaceState(null, "", TERUG);
+    meld("Bezig met inloggen…", true);
+    fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "grant_type=authorization_code&code=" + encodeURIComponent(q.get("code")) + "&redirect_uri=" + encodeURIComponent(TERUG) +
+        "&client_id=" + encodeURIComponent(client) + "&code_verifier=" + encodeURIComponent(verifier)
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      sessionStorage.removeItem("rusttv.verifier");
+      if (!j.refresh_token) throw new Error(j.error_description || j.error || "geen sleutel ontvangen");
+      var c = code(); if (!c) throw new Error("de code van de tv ontbreekt; typ ze en log opnieuw in");
+      return stuur(c, "spotify", client + ":" + j.refresh_token);
+    }).catch(function (e) { meld("Inloggen lukte niet: " + e.message); });
+  }
+})();
+</script>
+</body>
+</html>
