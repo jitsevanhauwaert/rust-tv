@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Rust TV</title>
+<link rel="stylesheet" href="css/stijl.css">
+</head>
+<body>
+<div id="lucht"></div>
+<div id="zon"></div>
+<main id="thuis">
+  <div class="boven">
+    <div id="klok">--:--</div>
+    <div id="datum"></div>
+    <div id="weer"></div>
+  </div>
+  <div id="tegels" class="rij"></div>
+  <div id="hint">Hou OK ingedrukt om een tegel te verplaatsen of te verwijderen</div>
+</main>
+<section id="alle" hidden>
+  <h2>Alle apps</h2>
+  <p class="uitleg">OK = openen · OK ingedrukt houden = op je startscherm zetten of eraf halen · Terug = sluiten</p>
+  <div id="raster"></div>
+</section>
+<div id="bewerk" hidden>
+  <span id="bewerkNaam"></span>
+  <span>◀ ▶ verplaatsen · OK klaar · ▼ verwijderen</span>
+</div>
+<div id="melding" hidden></div>
+<script src="js/app.js"></script>
+</body>
+</html>
