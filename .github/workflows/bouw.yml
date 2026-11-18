@@ -1,0 +1,25 @@
+# Maakt bij elke wijziging een nieuw RustTV.wgt en zet het klaar als Release.
+# De TizenBrew Installer haalt het daar op en installeert het op je tv.
+name: Bouw Rust TV
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  bouw:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inpakken
+        run: zip -r RustTV.wgt config.xml index.html icon.png css js
+      - name: Klaarzetten als Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Rust TV 1.0.${{ github.run_number }}
+          files: RustTV.wgt
