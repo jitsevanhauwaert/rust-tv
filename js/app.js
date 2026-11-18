@@ -712,7 +712,8 @@
     ];
     if (instSectie === 2) return [
       { t: "Wachter " + (wachterStatus === "actief" ? "actief" : wachterStatus === "uit" ? "niet actief" : "…"), s: "Opent Rust TV vanzelf als de tv aangaat", status: true },
-      { t: "Wachter opnieuw starten", s: "Als hij niet actief is", doe: function () { startWachter(); setTimeout(checkWachter, 1500); } }
+      { t: "Wachter opnieuw starten", s: "Als hij niet actief is", doe: function () { startWachter(); setTimeout(checkWachter, 1500); } },
+      { t: "Draaide de wachter al toen Rust TV opende?", s: wachterBijStart === "ja" ? "Ja: de wachter startte vanzelf mee" : wachterBijStart === "nee" ? "Nee: Rust TV moest de wachter zelf starten" : "Onbekend" }
     ];
     return [{ t: "Rust TV", s: "Versie 1.6 · haalt updates zelf van GitHub" }];
   }
@@ -854,7 +855,14 @@
   }
 
   // ---------- start ----------
-  startWachter();
+  // Eerst kijken of de wachter al draaide vóór Rust TV opende (zegt of mee-opstarten met de tv werkt)
+  var wachterBijStart = "onbekend";
+  try {
+    tizen.application.getAppsContext(function (l) {
+      wachterBijStart = l.some(function (c) { return c.appId === WACHTER; }) ? "ja" : "nee";
+      startWachter();
+    }, function () { startWachter(); });
+  } catch (e) { startWachter(); }
   setTimeout(checkWachter, 3000);
   setInterval(checkWachter, 60000);      // elke minuut: draait de wachter nog? anders opnieuw starten
   laadApps(function () { laadFavorieten(); laadVerborgen(); teken(); });
