@@ -344,7 +344,7 @@
       return teken();
     }
     if (zone === "muziek") {
-      if (k === 37) muziekFocus = Math.max(0, muziekFocus - 1);
+      if (k === 37) muziekFocus = Math.max(-1, muziekFocus - 1);   // -1 = de hoes: Spotify openen
       if (k === 39) muziekFocus = Math.min(2, muziekFocus + 1);
       if (k === 40) zone = "tegels";
       return teken();
@@ -656,9 +656,15 @@
     w.className = zone === "muziek" ? "focus" : "";
     var k = [$("mVorige"), $("mSpeel"), $("mVolgende")];
     k.forEach(function (el, i) { el.className = el.className.replace(" gekozen", "") + (zone === "muziek" && i === muziekFocus ? " gekozen" : ""); });
+    $("mHoes").className = zone === "muziek" && muziekFocus === -1 ? "gekozen" : "";
   }
   function muziekKnop(i) {
     if (!nuSpeelt) return;
+    if (i === -1) {
+      // de Spotify-app op de tv openen
+      for (var j = 0; j < apps.length; j++) if (/spotify/i.test(apps[j].naam)) return open(apps[j]);
+      return melding("De Spotify-app staat niet op je tv");
+    }
     var pad = i === 0 ? ["POST", "/me/player/previous"] : i === 2 ? ["POST", "/me/player/next"] : nuSpeelt.speelt ? ["PUT", "/me/player/pause"] : ["PUT", "/me/player/play"];
     if (i === 1) { nuSpeelt.pos += nuSpeelt.speelt ? Date.now() - nuSpeelt.toen : 0; nuSpeelt.toen = Date.now(); nuSpeelt.speelt = !nuSpeelt.speelt; tekenMuziek(); }
     spVraag(pad[0], pad[1], function () { setTimeout(haalSpeler, 700); }, function (f) { melding("Spotify: " + f); setTimeout(haalSpeler, 700); });
