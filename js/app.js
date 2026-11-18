@@ -715,7 +715,7 @@
       { t: "Wachter opnieuw starten", s: "Als hij niet actief is", doe: function () { startWachter(); setTimeout(checkWachter, 1500); } },
       { t: "Draaide de wachter al toen Rust TV opende?", s: wachterBijStart === "ja" ? "Ja: de wachter startte vanzelf mee" : wachterBijStart === "nee" ? "Nee: Rust TV moest de wachter zelf starten" : "Onbekend" }
     ];
-    return [{ t: "Rust TV", s: "Versie 1.6 · haalt updates zelf van GitHub" }];
+    return [{ t: "Rust TV", s: "Versie 1.7 · haalt updates zelf van GitHub" }];
   }
   function tekenInst() {
     var inv = $("invoer");
@@ -842,6 +842,23 @@
         function (e) { wachterStatus = "uit"; melding("Wachter start niet: " + (e && e.message ? e.message : e)); });
     } catch (e) { wachterStatus = "uit"; melding("Wachter start niet: " + (e && e.message ? e.message : e)); }
   }
+  // Laat de wachter weten dat Rust TV echt op het scherm staat, zodat hij stopt met Rust TV naar voren te halen.
+  var laatsteBevestiging = 0, zichtTimer = null;
+  function bevestigWachter() {
+    if (!window.tizen || !tizen.ApplicationControlData || Date.now() - laatsteBevestiging < 3000) return;
+    laatsteBevestiging = Date.now();
+    try {
+      tizen.application.launchAppControl(
+        new tizen.ApplicationControl("http://tizen.org/appcontrol/operation/service", null, null, null,
+          [new tizen.ApplicationControlData("rust", ["zichtbaar"])]), WACHTER, function () {}, function () {});
+    } catch (e) {}
+  }
+  function zichtbaarGeworden() {
+    clearTimeout(zichtTimer);
+    // pas na 3 s nog altijd zichtbaar = echt op het scherm (de tv kan nog naar HDMI 1 springen)
+    zichtTimer = setTimeout(function () { if (!document.hidden) bevestigWachter(); }, 3000);
+  }
+  document.addEventListener("keydown", function () { if (!document.hidden) bevestigWachter(); }, true);
   function checkWachter() {
     if (!window.tizen || !tizen.application) return;
     try {
@@ -864,6 +881,7 @@
     }, function () { startWachter(); });
   } catch (e) { startWachter(); }
   setTimeout(checkWachter, 3000);
+  zichtbaarGeworden();
   setInterval(checkWachter, 60000);      // elke minuut: draait de wachter nog? anders opnieuw starten
   laadApps(function () { laadFavorieten(); laadVerborgen(); teken(); });
   klok(); setInterval(klok, 15000);
@@ -872,6 +890,6 @@
   // Komt de app terug in beeld (na Netflix bv.): lijst en klok vernieuwen
   document.addEventListener("visibilitychange", function () {
     if (document.hidden && hdmiActief) sluitIngang();
-    if (!document.hidden) { laatsteToets = Date.now(); rust = false; klasse(); startWachter(); klok(); haalSpeler(); laadApps(function () { laadFavorieten(); teken(); }); }
+    if (!document.hidden) { zichtbaarGeworden(); laatsteToets = Date.now(); rust = false; klasse(); startWachter(); klok(); haalSpeler(); laadApps(function () { laadFavorieten(); teken(); }); }
   });
 })();
