@@ -317,6 +317,7 @@
     if (isTerug(k)) {
       e.preventDefault();
       if (menu) sluitMenu();
+      else if (koppel) { stopKoppel(); }
       else if (scherm === "inst") { scherm = "alle"; }
       else if (scherm === "alle") { scherm = "thuis"; }
       else if (bewegen >= 0) { bewegen = -1; bewaar(); }
@@ -686,7 +687,10 @@
       { t: "Online, volgens seizoen en weer", s: "Elke dag een nieuwe foto die past bij het weer in Wevelgem", keuze: "online" },
       { t: "Mijn album", s: "Alleen foto's uit je gedeelde Google Foto's-album", keuze: "album" },
       { t: "Afwisselend", s: "Je eigen foto's en online foto's door elkaar", keuze: "mix" },
-      { t: "Albumlink", s: fotoInst.album ? fotoInst.album : "Nog niet ingesteld · druk op OK om de link te typen of te plakken", invoer: "album" },
+      koppel && koppel.doel === "album"
+        ? { t: "Album koppelen met je gsm", s: "Open op je gsm " + KOPPELADRES + " en typ deze code:", code: koppel.code, doe: function () {} }
+        : { t: "Album koppelen met je gsm", s: fotoInst.album ? "Gekoppeld: " + fotoInst.album + " · OK om te wijzigen" : "Nog niet ingesteld · druk op OK", doe: function () { startKoppel("album"); } },
+      { t: "Albumlink typen", s: "Alleen als je een toetsenbord aan de tv hebt hangen", invoer: "album" },
       { t: "Andere foto", s: "Nu een andere foto tonen", doe: function () { fotoActie("andere"); } },
       { t: "Vaker tonen", s: "De foto van nu komt vaker terug", doe: function () { fotoActie("vaker"); } },
       { t: "Nooit meer tonen", s: "De foto van nu zie je niet meer", doe: function () { fotoActie("nooit"); } }
@@ -695,8 +699,10 @@
       { t: "Gekoppeld", s: nuSpeelt ? "Nu: " + nuSpeelt.titel + " · " + nuSpeelt.artiest : "Er speelt nu niets" },
       { t: "Ontkoppelen", s: "Spotify loskoppelen van deze tv", doe: function () { sp = null; schrijf("rusttv.spotify", null); startSpotify(); melding("Spotify losgekoppeld"); } }
     ] : [
-      { t: "1. Open op je gsm", s: "jitsevanhauwaert.github.io/rust-tv/spotify.html · log in en tik op Kopieer" },
-      { t: "2. Plak hier de code", s: "Druk op OK. Plak met het toetsenbord van de SmartThings-app op je gsm.", invoer: "spotify" }
+      koppel && koppel.doel === "spotify"
+        ? { t: "Spotify koppelen met je gsm", s: "Open op je gsm " + KOPPELADRES + " en typ deze code:", code: koppel.code, doe: function () {} }
+        : { t: "Spotify koppelen met je gsm", s: "Druk op OK. Je krijgt een code om op je gsm in te typen.", doe: function () { startKoppel("spotify"); } },
+      { t: "Code plakken", s: "Alleen als je een toetsenbord aan de tv hebt hangen", invoer: "spotify" }
     ];
     if (instSectie === 2) return [
       { t: "Wachter " + (wachterStatus === "actief" ? "actief" : wachterStatus === "uit" ? "niet actief" : "…"), s: "Opent Rust TV vanzelf als de tv aangaat", status: true },
@@ -720,6 +726,7 @@
       var tx = document.createElement("div"); tx.className = "tekst";
       var a = document.createElement("div"); a.className = "t"; a.textContent = it.t; tx.appendChild(a);
       if (it.s) { var b = document.createElement("div"); b.className = "s"; b.textContent = it.s; tx.appendChild(b); }
+      if (it.code) { var c = document.createElement("div"); c.className = "code"; c.textContent = it.code.slice(0, 4) + " " + it.code.slice(4); tx.appendChild(c); }
       d.appendChild(tx);
       if (it.invoer && invoerDoel === it.invoer) { tx.appendChild($("invoer")); }
       p.appendChild(d);
@@ -752,14 +759,66 @@
   function bewaarInvoer() {
     var i = $("invoer"), v = i.value.trim(), doel = invoerDoel;
     stopInvoer();
-    if (doel === "album") {
-      if (v && !/^https:\/\/(photos\.app\.goo\.gl|photos\.google\.com|goo\.gl)\//.test(v)) { melding("Dat lijkt geen link van Google Foto's"); return teken(); }
-      fotoInst.album = v; albumLijst = null; bewaarFotoInst();
-      if (v) { melding("Album gekoppeld, de foto's worden geladen…"); laadAlbum(function (l) { melding(l.length + " foto's gevonden"); if (fotoInst.bron === "online") fotoInst.bron = "mix"; bewaarFotoInst(); foto(true); teken(); }, function (f) { melding(f); }); }
-    }
+    if (doel === "album") zetAlbum(v);
     if (doel === "spotify" && v) koppelSpotify(v);
     teken();
   }
+  function zetAlbum(v) {
+    v = (v || "").trim();
+    if (v && !/^https:\/\/(photos\.app\.goo\.gl|photos\.google\.com|goo\.gl)\//.test(v)) { melding("Dat lijkt geen link van Google Foto's"); return teken(); }
+    fotoInst.album = v; albumLijst = null; bewaarFotoInst();
+    if (v) { melding("Album gekoppeld, de foto's worden geladen…"); laadAlbum(function (l) { melding(l.length + " foto's gevonden"); if (fotoInst.bron === "online") fotoInst.bron = "mix"; bewaarFotoInst(); foto(true); teken(); }, function (f) { melding(f); }); }
+    teken();
+  }
+
+  // ---------- koppelen met je gsm (zonder SmartThings) ----------
+  // De tv toont een code van 8 tekens. Je gsm stuurt de gegevens via ntfy.sh naar een kanaal met die code.
+  // Er wordt niets bewaard: alleen de tv die op dat moment luistert, krijgt het bericht.
+  var KOPPELADRES = "jitsevanhauwaert.github.io/rust-tv/koppel.html";
+  var koppel = null;   // {doel, code, xhr, tot}
+  function nieuweCode() {
+    var t = "ABCDEFGHJKMNPQRSTUVWXYZ23456789", c = "";
+    for (var i = 0; i < 8; i++) c += t[Math.floor(Math.random() * t.length)];
+    return c;
+  }
+  function startKoppel(doel) {
+    stopKoppel();
+    koppel = { doel: doel, code: nieuweCode(), tot: Date.now() + 15 * 60000 };
+    luister(koppel);
+    teken();
+  }
+  function stopKoppel() {
+    if (koppel && koppel.xhr) { try { koppel.xhr.abort(); } catch (e) {} }
+    koppel = null;
+  }
+  function luister(k) {
+    if (koppel !== k) return;
+    if (Date.now() > k.tot) { stopKoppel(); melding("De koppelcode is verlopen. Druk opnieuw op OK."); return teken(); }
+    var x = new XMLHttpRequest(), gelezen = 0;
+    k.xhr = x;
+    x.open("GET", "https://ntfy.sh/rusttv-" + k.code.toLowerCase() + "/json");
+    function verwerk() {
+      var tekst = x.responseText || "", nl;
+      while ((nl = tekst.indexOf("\n", gelezen)) >= 0) {
+        var regel = tekst.slice(gelezen, nl); gelezen = nl + 1;
+        try {
+          var m = JSON.parse(regel);
+          if (m.event !== "message") continue;
+          var d = JSON.parse(m.message);
+          if (koppel !== k) return;
+          if (d.soort !== k.doel) continue;
+          stopKoppel();
+          if (d.soort === "album") zetAlbum(d.waarde);
+          if (d.soort === "spotify") koppelSpotify(d.waarde);
+          return teken();
+        } catch (e) {}
+      }
+    }
+    x.onprogress = verwerk;
+    x.onload = x.onerror = function () { verwerk(); if (koppel === k) setTimeout(function () { luister(k); }, 2000); };
+    x.send();
+  }
+
   function stopInvoer() {
     var i = $("invoer"); i.blur(); i.hidden = true; document.body.appendChild(i);
     invoerDoel = null; teken();
