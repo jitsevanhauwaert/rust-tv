@@ -120,3 +120,5 @@ body.hdmi #muziek{display:none}
 #invoer[hidden]{display:none}
 #melding{z-index:10}
 .item .code{font-size:64px;letter-spacing:10px;margin-top:10px;font-weight:600}
+#mHoes{transition:transform .15s,box-shadow .15s}
+#mHoes.gekozen{box-shadow:0 0 0 4px #F6F2EC;transform:scale(1.06)}
