@@ -118,12 +118,15 @@
     var m = $("melding"); m.textContent = t; m.hidden = false;
     clearTimeout(meldTimer); meldTimer = setTimeout(function () { m.hidden = true; }, 5000);
   }
-  var avond = false, rust = false;
+  var avond = false, rust = false, nacht = false;
   function klasse() {
     var k = [];
     if (hdmiActief) k.push("hdmi");
     if (avond) k.push("avond");
     if (rust) k.push("rust");
+    if (nacht) k.push("nacht");
+    if (zone === "weer" && scherm === "thuis") k.push("weer");
+    if (rust && typeof nuSpeelt !== "undefined" && nuSpeelt && nuSpeelt.speelt) k.push("muziekrust");
     document.body.className = k.join(" ");
   }
   function lees(sleutel, standaard) { try { var v = JSON.parse(localStorage.getItem(sleutel)); return v === null || v === undefined ? standaard : v; } catch (e) { return standaard; } }
@@ -269,7 +272,7 @@
   // ---------- rust-stand: na 30 s niets doen schuiven de apps weg ----------
   var laatsteToets = Date.now();
   setInterval(function () {
-    if (!rust && scherm === "thuis" && !menu && bewegen < 0 && !hdmiActief && !document.hidden && Date.now() - laatsteToets > 30000) { rust = true; klasse(); }
+    if (!rust && scherm === "thuis" && zone !== "weer" && !menu && bewegen < 0 && !hdmiActief && !document.hidden && Date.now() - laatsteToets > 30000) { rust = true; klasse(); }
   }, 1000);
   function wekOp() { laatsteToets = Date.now(); if (rust) { rust = false; klasse(); return true; } return false; }
 
@@ -321,7 +324,7 @@
       else if (scherm === "inst") { scherm = "alle"; }
       else if (scherm === "alle") { scherm = "thuis"; }
       else if (bewegen >= 0) { bewegen = -1; bewaar(); }
-      else if (zone === "muziek") { zone = "tegels"; }
+      else if (zone === "muziek" || zone === "weer") { zone = "tegels"; klasse(); }
       return teken(); // op het startscherm doet Terug verder niets
     }
     if (menu) {
@@ -343,6 +346,10 @@
       if (k === 39 && bewegen < max - 1) { var u = favorieten[bewegen + 1]; favorieten[bewegen + 1] = favorieten[bewegen]; favorieten[bewegen] = u; bewegen++; focus = bewegen; }
       return teken();
     }
+    if (zone === "weer") {
+      if (k === 38) { zone = "tegels"; klasse(); }
+      return teken();
+    }
     if (zone === "muziek") {
       if (k === 37) muziekFocus = Math.max(-1, muziekFocus - 1);   // -1 = de hoes: Spotify openen
       if (k === 39) muziekFocus = Math.min(2, muziekFocus + 1);
@@ -350,6 +357,7 @@
       return teken();
     }
     if (k === 38 && muziekZichtbaar()) { zone = "muziek"; muziekFocus = 1; return teken(); }
+    if (k === 40 && weerData) { zone = "weer"; klasse(); return teken(); }
     if (k === 37) focus = Math.max(0, focus - 1);
     if (k === 39) focus = Math.min(max, focus + 1);
     teken();
@@ -366,7 +374,7 @@
   // ---------- klok en weer ----------
   var DAGEN = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
   var MAANDEN = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
-  var weerCode = null;
+  var weerCode = null, weerData = null;
   function twee(n) { return (n < 10 ? "0" : "") + n; }
   function klok() {
     var d = new Date();
@@ -379,10 +387,15 @@
   var WEER = { 0: "helder", 1: "vrij helder", 2: "half bewolkt", 3: "bewolkt", 45: "mist", 48: "mist", 51: "motregen", 53: "motregen", 55: "motregen", 61: "regen", 63: "regen", 65: "zware regen", 71: "sneeuw", 73: "sneeuw", 75: "sneeuw", 80: "buien", 81: "buien", 82: "zware buien", 95: "onweer" };
   function weer() {
     var x = new XMLHttpRequest();
-    x.open("GET", "https://api.open-meteo.com/v1/forecast?latitude=" + LAT + "&longitude=" + LON + "&current=temperature_2m,weather_code&timezone=Europe%2FBrussels");
+    x.open("GET", "https://api.open-meteo.com/v1/forecast?latitude=" + LAT + "&longitude=" + LON +
+      "&current=temperature_2m,weather_code" +
+      "&hourly=temperature_2m,weather_code,precipitation" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum" +
+      "&forecast_days=4&timezone=Europe%2FBrussels");
     x.onload = function () {
       try {
-        var c = JSON.parse(x.responseText).current;
+        var j = JSON.parse(x.responseText), c = j.current;
+        weerData = j; tekenWeer();
         weerCode = c.weather_code;
         foto();
         $("weer").textContent = Math.round(c.temperature_2m) + "° · " + (WEER[c.weather_code] || "") + " in Wevelgem";
@@ -500,8 +513,14 @@
   }
   function zetAvond(d) {
     var dd = dagdeel(d), nu = dd === "avond" || dd === "nacht";
-    if (nu !== avond) { avond = nu; klasse(); }
+    var m = d.getHours() * 60 + d.getMinutes();
+    var n = nachtInst.aan && (nachtInst.van <= nachtInst.tot ? m >= nachtInst.van && m < nachtInst.tot : m >= nachtInst.van || m < nachtInst.tot);
+    if (nu !== avond || n !== nacht) { avond = nu; nacht = n; klasse(); }
   }
+  // Nachtstand (v1.8): bijna zwart, alleen een gedimde klok
+  var nachtInst = lees("rusttv.nacht", null) || { aan: true, van: 23 * 60, tot: 7 * 60 };
+  function bewaarNacht() { schrijf("rusttv.nacht", nachtInst); }
+  function uurTekst(m) { return twee(Math.floor(m / 60) % 24) + ":" + twee(m % 60); }
   function dagdeelNr(d) { return { ochtend: 0, dag: 1, avond: 2, nacht: 3 }[dagdeel(d)]; }
 
   // ---------- foto's: online, eigen album, of afwisselend ----------
@@ -629,6 +648,7 @@
       nuSpeelt = st === 204 || !j || !j.item ? null : {
         titel: j.item.name, artiest: j.item.artists ? j.item.artists.map(function (a) { return a.name; }).join(", ") : (j.item.show ? j.item.show.name : ""),
         hoes: (j.item.album && j.item.album.images && j.item.album.images.length ? j.item.album.images[j.item.album.images.length > 1 ? 1 : 0].url : (j.item.images && j.item.images[0] ? j.item.images[0].url : "")),
+        hoesGroot: (j.item.album && j.item.album.images && j.item.album.images.length ? j.item.album.images[0].url : (j.item.images && j.item.images[0] ? j.item.images[0].url : "")),
         speelt: j.is_playing, pos: j.progress_ms || 0, duur: j.item.duration_ms || 1, toen: Date.now(), toestel: j.device ? j.device.name : ""
       };
       tekenMuziek();
@@ -637,19 +657,27 @@
   function muziekZichtbaar() { return !!nuSpeelt; }
   function tekenMuziek() {
     var w = $("muziek");
-    if (!nuSpeelt) { w.hidden = true; if (zone === "muziek") { zone = "tegels"; teken(); } return; }
+    if (!nuSpeelt) { w.hidden = true; klasse(); if (zone === "muziek") { zone = "tegels"; teken(); } return; }
     w.hidden = false;
     $("mTitel").textContent = nuSpeelt.titel;
     $("mArtiest").textContent = nuSpeelt.artiest;
     $("mBron").textContent = "SPOTIFY" + (nuSpeelt.toestel ? " · " + nuSpeelt.toestel.toUpperCase() : "");
     if ($("mHoes").getAttribute("src") !== nuSpeelt.hoes) $("mHoes").setAttribute("src", nuSpeelt.hoes);
     $("mSpeel").className = "mk" + (nuSpeelt.speelt ? " pauze" : " speel");
+    $("gTitel").textContent = nuSpeelt.titel;
+    $("gArtiest").textContent = nuSpeelt.artiest;
+    $("gBron").textContent = "NU OP SPOTIFY" + (nuSpeelt.toestel ? " · " + nuSpeelt.toestel.toUpperCase() : "");
+    if ($("gHoes").getAttribute("src") !== nuSpeelt.hoesGroot) $("gHoes").setAttribute("src", nuSpeelt.hoesGroot);
+    klasse();
     tekenBalk(); tekenMuziekFocus();
   }
+  function mmss(ms) { var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + twee(s % 60); }
   function tekenBalk() {
     if (!nuSpeelt) return;
     var p = nuSpeelt.pos + (nuSpeelt.speelt ? Date.now() - nuSpeelt.toen : 0);
     $("mVoort").style.width = Math.min(100, p / nuSpeelt.duur * 100) + "%";
+    $("gVoort").style.width = Math.min(100, p / nuSpeelt.duur * 100) + "%";
+    $("gPos").textContent = mmss(Math.min(p, nuSpeelt.duur)); $("gDuur").textContent = mmss(nuSpeelt.duur);
   }
   function tekenMuziekFocus() {
     var w = $("muziek"); if (!w) return;
@@ -685,7 +713,7 @@
   }
 
   // ---------- instellingen ----------
-  var SECTIES = ["Foto's", "Spotify", "Wachter", "Over Rust TV"];
+  var SECTIES = ["Foto's", "Spotify", "Nachtstand", "Wachter", "Over Rust TV"];
   var instSectie = 0, instKolom = 0, instI = 0, wachterStatus = "onbekend";
   var invoerDoel = null;
   function instItems() {
@@ -710,12 +738,25 @@
         : { t: "Spotify koppelen met je gsm", s: "Druk op OK. Je krijgt een code om op je gsm in te typen.", doe: function () { startKoppel("spotify"); } },
       { t: "Code plakken", s: "Alleen als je een toetsenbord aan de tv hebt hangen", invoer: "spotify" }
     ];
-    if (instSectie === 2) return [
+    if (instSectie === 2) {
+      var VAN = [21 * 60, 21 * 60 + 30, 22 * 60, 22 * 60 + 30, 23 * 60, 23 * 60 + 30, 0];
+      var TOT = [5 * 60, 5 * 60 + 30, 6 * 60, 6 * 60 + 30, 7 * 60, 7 * 60 + 30, 8 * 60, 9 * 60];
+      function volgende(lijst, v) { var i = lijst.indexOf(v); return lijst[(i + 1) % lijst.length]; }
+      return [
+        { t: "Nachtstand " + (nachtInst.aan ? "aan" : "uit"), s: "Bijna zwart scherm met alleen een gedimde klok", keuzeAan: true,
+          doe: function () { nachtInst.aan = !nachtInst.aan; bewaarNacht(); zetAvond(new Date()); } },
+        { t: "Vanaf " + uurTekst(nachtInst.van), s: "Druk op OK om te wijzigen",
+          doe: function () { nachtInst.van = volgende(VAN, nachtInst.van); bewaarNacht(); zetAvond(new Date()); } },
+        { t: "Tot " + uurTekst(nachtInst.tot), s: "Druk op OK om te wijzigen",
+          doe: function () { nachtInst.tot = volgende(TOT, nachtInst.tot); bewaarNacht(); zetAvond(new Date()); } }
+      ];
+    }
+    if (instSectie === 3) return [
       { t: "Wachter " + (wachterStatus === "actief" ? "actief" : wachterStatus === "uit" ? "niet actief" : "…"), s: "Opent Rust TV vanzelf als de tv aangaat", status: true },
       { t: "Wachter opnieuw starten", s: "Als hij niet actief is", doe: function () { startWachter(); setTimeout(checkWachter, 1500); } },
       { t: "Draaide de wachter al toen Rust TV opende?", s: wachterBijStart === "ja" ? "Ja: de wachter startte vanzelf mee" : wachterBijStart === "nee" ? "Nee: Rust TV moest de wachter zelf starten" : "Onbekend" }
     ];
-    return [{ t: "Rust TV", s: "Versie 1.7 · haalt updates zelf van GitHub" }];
+    return [{ t: "Rust TV", s: "Versie 1.8 · haalt updates zelf van GitHub" }];
   }
   function tekenInst() {
     var inv = $("invoer");
@@ -746,7 +787,7 @@
     if (k === 38) { if (instKolom === 0) instSectie = Math.max(0, instSectie - 1); else instI = Math.max(0, instI - 1); }
     if (k === 40) { if (instKolom === 0) instSectie = Math.min(SECTIES.length - 1, instSectie + 1); else instI = Math.min(instItems().length - 1, instI + 1); }
     if (instKolom === 0) instI = 0;
-    if (instSectie === 2) checkWachter();
+    if (instSectie === 3) checkWachter();
     teken();
   }
   function instOk() {
@@ -869,6 +910,46 @@
         if (scherm === "inst") tekenInst();
       }, function () {});
     } catch (e) {}
+  }
+
+  // ---------- weer in detail (v1.8): ▼ vanaf je tegels ----------
+  var ICOON = {
+    zon: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    wolk: '<path d="M7 18a5 5 0 1 1 9.6-2H17a3.5 3.5 0 0 1 0 7H7"/>',
+    regen: '<path d="M7 14a5 5 0 1 1 9.6-2H17a3.5 3.5 0 0 1 0 7H7a4 4 0 0 1 0-8"/><path d="M9 20l-1 2M13 20l-1 2M17 20l-1 2"/>',
+    sneeuw: '<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/>',
+    mist: '<path d="M4 9h16M4 13h16M6 17h12"/>',
+    onweer: '<path d="M7 14a5 5 0 1 1 9.6-2H17a3.5 3.5 0 0 1 0 7"/><path d="M12 13l-2 4h4l-2 4"/>'
+  };
+  function icoonVoor(c) {
+    var g = weergroep(c);
+    var naam = g === "sunny" ? "zon" : g === "cloudy" ? "wolk" : g === "rain" ? "regen" : g === "snow" ? "sneeuw" : g === "fog" ? "mist" : g === "storm" ? "onweer" : "wolk";
+    return '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICOON[naam] + "</svg>";
+  }
+  var DAGKORT = ["Zondag", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag"];
+  function mmT(v) { return (Math.round(v * 10) / 10).toString().replace(".", ","); }
+  function tekenWeer() {
+    if (!weerData || !weerData.hourly) return;
+    var h = weerData.hourly, nu = Date.now(), start = 0;
+    for (var i = 0; i < h.time.length; i++) { if (new Date(h.time[i]).getTime() + 3600000 > nu) { start = i; break; } }
+    var html = "";
+    for (var k = 0; k < 8 && start + k < h.time.length; k++) {
+      var t = start + k, uurLabel = k === 0 ? "Nu" : new Date(h.time[t]).getHours() + "u";
+      var mm = h.precipitation[t] || 0, hoog = mm <= 0 ? 4 : Math.min(70, 10 + mm * 40);
+      html += '<div class="wuur"><div class="wt">' + uurLabel + '</div><div class="wi">' + icoonVoor(h.weather_code[t]) + '</div><div class="wg">' +
+        Math.round(h.temperature_2m[t]) + '°</div><div class="wb"><div style="height:' + hoog + 'px" class="' + (mm > 0 ? "nat" : "") + '"></div></div><div class="wm">' +
+        (mm > 0 ? mmT(mm) + " mm" : "droog") + "</div></div>";
+    }
+    $("wUren").innerHTML = html;
+    var d = weerData.daily, dh = "";
+    if (d) for (var n = 1; n <= 3 && n < d.time.length; n++) {
+      var dag = n === 1 ? "Morgen" : DAGKORT[new Date(d.time[n] + "T12:00").getDay()];
+      var r = d.precipitation_sum[n] || 0;
+      var omschr = (WEER[d.weather_code[n]] || "") + (r >= 1 ? " · " + mmT(r) + " mm" : r > 0 ? " · een paar druppels" : " · droog");
+      dh += '<div class="wdag"><div class="wi">' + icoonVoor(d.weather_code[n]) + '</div><div><div class="wd">' + dag + '</div><div class="wg">' +
+        Math.round(d.temperature_2m_min[n]) + "° / " + Math.round(d.temperature_2m_max[n]) + '°</div><div class="wo">' + omschr + "</div></div></div>";
+    }
+    $("wDagen").innerHTML = dh;
   }
 
   // ---------- start ----------
