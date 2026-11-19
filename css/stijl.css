@@ -122,3 +122,62 @@ body.hdmi #muziek{display:none}
 .item .code{font-size:64px;letter-spacing:10px;margin-top:10px;font-weight:600}
 #mHoes{transition:transform .15s,box-shadow .15s}
 #mHoes.gekozen{box-shadow:0 0 0 4px #F6F2EC;transform:scale(1.06)}
+
+/* ---------- v1.8 ---------- */
+/* Weer in detail */
+#weerPaneel{position:absolute;left:0;bottom:0;width:1920px;height:640px;box-sizing:border-box;padding:56px 110px;background:rgba(12,14,22,.78);border-radius:36px 36px 0 0;transform:translateY(660px);transition:transform .8s ease}
+body.weer #weerPaneel{transform:translateY(0)}
+body.weer .rij{transform:translateY(420px);opacity:0}
+body.weer .boven{margin-top:70px}
+body.weer #klok{font-size:120px}
+body.weer #muziek{opacity:0}
+.wkop{display:flex;justify-content:space-between;align-items:baseline;font-size:40px}
+.wterug{font-size:24px;opacity:.6}
+#wUren{display:flex;justify-content:space-between;margin-top:30px}
+.wuur{width:150px;text-align:center}
+.wt{font-size:24px;opacity:.7}
+.wi svg{width:48px;height:48px;fill:none;stroke:#F6F2EC;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wuur .wi{margin:14px 0}
+.wuur .wg{font-size:34px}
+.wb{height:70px;display:flex;align-items:flex-end;justify-content:center;margin-top:14px}
+.wb div{width:26px;border-radius:6px;background:rgba(246,242,236,.22)}
+.wb div.nat{background:rgba(150,190,240,.8)}
+.wm{font-size:18px;opacity:.6;margin-top:6px}
+#wDagen{display:flex;margin-top:40px}
+.wdag{flex:1;display:flex;align-items:center;padding:24px 30px;border-radius:24px;background:rgba(255,255,255,.08);margin-right:28px}
+.wdag:last-child{margin-right:0}
+.wdag .wi{margin-right:26px}
+.wd{font-size:26px;opacity:.75}
+.wdag .wg{font-size:36px;margin-top:4px}
+.wo{font-size:22px;opacity:.65;margin-top:2px}
+
+/* Muziek in de rust-stand: de hoes groot in beeld */
+#grootMuziek{position:absolute;top:290px;left:200px;display:flex;align-items:center;opacity:0;transition:opacity 1.2s ease;pointer-events:none}
+#gHoes{width:460px;height:460px;border-radius:24px;object-fit:cover;margin-right:70px;background:rgba(255,255,255,.08)}
+.gtekst{width:900px}
+#gBron{font-size:22px;letter-spacing:3px;opacity:.65}
+#gTitel{font-size:84px;font-weight:300;line-height:1.05;margin-top:16px;max-height:180px;overflow:hidden}
+#gArtiest{font-size:40px;opacity:.8;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#gBalk{width:640px;height:5px;background:rgba(255,255,255,.2);border-radius:3px;margin-top:44px}
+#gVoort{height:5px;background:#F6F2EC;border-radius:3px;width:0;transition:width 1s linear}
+#gTijd{display:flex;justify-content:space-between;width:640px;font-size:22px;opacity:.6;margin-top:10px}
+body.muziekrust #grootMuziek{opacity:1}
+body.muziekrust #sluier{background:rgba(10,12,20,.62)}
+body.muziekrust .boven{position:absolute;top:70px;right:110px;margin:0;text-align:right}
+body.muziekrust #klok{font-size:96px}
+body.muziekrust #datum{font-size:28px}
+body.muziekrust #weer,body.muziekrust #muziek{opacity:0}
+
+/* Nachtstand: bijna zwart, alleen een gedimde klok */
+body.nacht #foto,body.nacht #sluier,body.nacht #lucht,body.nacht #zon,body.nacht #bron{opacity:0}
+body.nacht{background:#05060a}
+body.nacht .boven{color:#8a8070}
+body.nacht #klok{text-shadow:none}
+body.nacht #weer{display:none}
+body.nacht.rust .boven{margin-top:410px}
+body.nacht.rust #klok{font-size:220px}
+body.nacht #muziek{opacity:.5}
+body.nacht.muziekrust #grootMuziek{opacity:.55}
+#foto,#lucht,#zon{transition:opacity 3s}
+body.nacht .rij{opacity:.6}
+body.nacht.rust .rij{opacity:0}
